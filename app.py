@@ -146,7 +146,6 @@ def download_model_if_needed(model_filename, file_id):
         try:
             # Option 1: Google Drive (replace with your actual Google Drive file ID)
             # Example: https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing
-            file_id = "YOUR_GOOGLE_DRIVE_FILE_ID"  # Replace with your actual file ID for this model
             url = f"https://drive.google.com/uc?id={file_id}"
             gdown.download(url, model_path, quiet=False)
             
