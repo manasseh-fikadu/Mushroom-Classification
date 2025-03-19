@@ -8,6 +8,8 @@ from PIL import Image, ImageFile
 import numpy as np
 import time
 import os
+import requests
+import gdown
 
 # For Lightning models
 import pytorch_lightning as pl
@@ -23,6 +25,17 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Define the ResNet model class
+class MushroomClassifierResNet(pl.LightningModule):
+    def __init__(self, num_classes):
+        super().__init__()
+        self.model = models.resnet152(weights=None)
+        num_ftrs = self.model.fc.in_features
+        self.model.fc = nn.Linear(num_ftrs, num_classes)
+    
+    def forward(self, x):
+        return self.model(x)
 
 # Define the EfficientNet model class
 class MushroomClassifierEfficientNet(pl.LightningModule):
@@ -120,10 +133,45 @@ def get_transform():
         transforms.Normalize(mean=mean, std=std)
     ])
 
+# Function to download model if not present
+def download_model_if_needed(model_filename, file_id):
+    model_path = os.path.join(os.getcwd(), model_filename)
+    
+    # Check if model already exists
+    if os.path.exists(model_path):
+        return model_path
+    
+    # If not, download it
+    with st.spinner(f"Downloading model {model_filename}... This may take a minute..."):
+        try:
+            # Option 1: Google Drive (replace with your actual Google Drive file ID)
+            # Example: https://drive.google.com/file/d/YOUR_FILE_ID/view?usp=sharing
+            file_id = "YOUR_GOOGLE_DRIVE_FILE_ID"  # Replace with your actual file ID for this model
+            url = f"https://drive.google.com/uc?id={file_id}"
+            gdown.download(url, model_path, quiet=False)
+            
+            st.success(f"Model {model_filename} downloaded successfully!")
+            return model_path
+        except Exception as e:
+            st.error(f"Error downloading model: {str(e)}")
+            st.info("Please upload a model file manually or check your internet connection.")
+            # Allow manual upload as fallback
+            uploaded_model = st.file_uploader(f"Upload model file ({model_filename})", type=["pth"])
+            if uploaded_model is not None:
+                with open(model_path, "wb") as f:
+                    f.write(uploaded_model.getbuffer())
+                st.success("Model uploaded successfully!")
+                return model_path
+            return None
+
 # Function to load model
-def load_model(model_path):
+def load_model(model_path, model_type="resnet"):
     num_classes = len(class_names)
-    model = MushroomClassifierEfficientNet(num_classes, efficientnet_version='b4')
+    
+    if model_type == "resnet":
+        model = MushroomClassifierResNet(num_classes)
+    else:  # efficientnet
+        model = MushroomClassifierEfficientNet(num_classes, efficientnet_version='b4')
     
     # Load the model weights
     checkpoint = torch.load(model_path, map_location=torch.device('cpu'))
@@ -227,17 +275,35 @@ def predict(model, image):
 def main():
     st.title("🍄 Mushroom Classification App")
     
-    # Add sidebar for model information
-    st.sidebar.title("Model Information")
+    # Add sidebar for model selection
+    st.sidebar.title("Model Settings")
+    model_type = st.sidebar.selectbox(
+        "Select Model",
+        ["ResNet152", "EfficientNet-B4"],
+        index=0
+    )
+    # Download and load the selected model
+    if model_type == "ResNet152":
+        model_path = download_model_if_needed("resnet_model.pth", "1yYZth_X0o66XbdwxTzC6B08Lt0FUHjpd")
+        if model_path:
+            model = load_model(model_path, "resnet")
+            st.sidebar.info("ResNet152 model loaded successfully!")
+        else:
+            st.error("Failed to load ResNet model. Please check the error message above.")
+            st.stop()
+    else:  # EfficientNet
+        model_path = download_model_if_needed("efficientnet_model.pth", "1ceLOCtm16wLJYsdMAi4ZuXVZZWIjHYaZ")
+        if model_path:
+            model = load_model(model_path, "efficientnet")
+            st.sidebar.info("EfficientNet-B4 model loaded successfully!")
+        else:
+            st.error("Failed to load EfficientNet model. Please check the error message above.")
+            st.stop()
     
-    # Load the model
-    model_path = "efficientnet_model.pth"
-    model = load_model(model_path)
-    st.sidebar.info("EfficientNet-B4 model loaded successfully!")
-    
-    # Add information about the model
-    with st.sidebar.expander("About the Model"):
+    # Add information about the models
+    with st.sidebar.expander("About the Models"):
         st.write("""
+        - **ResNet152**: A deep residual network with 152 layers, known for its ability to train very deep networks effectively.
         - **EfficientNet-B4**: A model that balances network depth, width, and resolution for better efficiency and accuracy.
         """)
     
